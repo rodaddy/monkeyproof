@@ -1,0 +1,21 @@
+{
+  "name": "monkeyproof",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "hono": "^4.12.10"
+  },
+  "version": "0.1.0",
+  "description": "Remote coding agent orchestration server",
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "dev": "bun --watch run src/index.ts"
+  }
+}
