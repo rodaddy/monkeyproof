@@ -1,0 +1,24 @@
+[Unit]
+Description=monkeyproof - Remote Coding Agent Orchestration
+After=network.target
+Documentation=https://github.com/rodaddy/monkeyproof
+
+[Service]
+Type=simple
+User=skippy
+Group=skippy
+WorkingDirectory=/home/skippy/Development/monkeyproof
+ExecStart=/usr/local/bin/bun run src/index.ts
+Restart=on-failure
+RestartSec=5
+Environment=PORT=3200
+Environment=MAX_SESSIONS=10
+EnvironmentFile=-/home/skippy/.skippy-env
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/home/skippy
+
+[Install]
+WantedBy=multi-user.target
