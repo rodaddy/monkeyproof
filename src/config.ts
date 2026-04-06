@@ -13,6 +13,7 @@ export const config = {
 
 /**
  * Agent presets -- common command + args combos.
+ * Model names must match LiteLLM proxy aliases (10.71.1.33:4000).
  */
 export const presets: Record<string, { command: string; args: string[] }> = {
   claude: {
@@ -21,11 +22,11 @@ export const presets: Record<string, { command: string; args: string[] }> = {
   },
   "claude-sonnet": {
     command: "claude",
-    args: ["--print", "--permission-mode", "bypassPermissions", "--model", "claude-sonnet-4-20250514"],
+    args: ["--print", "--permission-mode", "bypassPermissions", "--model", "sonnet"],
   },
   "claude-opus": {
     command: "claude",
-    args: ["--print", "--permission-mode", "bypassPermissions", "--model", "claude-opus-4-0520"],
+    args: ["--print", "--permission-mode", "bypassPermissions", "--model", "opus"],
   },
   codex: {
     command: "codex",
@@ -34,5 +35,17 @@ export const presets: Record<string, { command: string; args: string[] }> = {
   "codex-auto": {
     command: "codex",
     args: ["exec", "--full-auto"],
+  },
+  "claude-interactive": {
+    command: "claude",
+    args: ["--permission-mode", "bypassPermissions"],
+  },
+  "claude-interactive-sonnet": {
+    command: "claude",
+    args: ["--permission-mode", "bypassPermissions", "--model", "sonnet"],
+  },
+  "claude-interactive-opus": {
+    command: "claude",
+    args: ["--permission-mode", "bypassPermissions", "--model", "opus"],
   },
 };
