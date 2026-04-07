@@ -8,10 +8,12 @@ import { Hono } from "hono";
 import { config } from "./config";
 import {
   createSession,
+  createInteractiveSession,
   listSessions,
   getSession,
   killSession,
   sendInput,
+  readTranscript,
   addWsClient,
   removeWsClient,
   sessionExists,
@@ -49,14 +51,25 @@ app.get("/health", (c) => c.json({ ok: true }));
 
 // ---------------------------------------------------------------------------
 // POST /sessions -- spawn a new session
+// Body: { task, mode?: "print" | "interactive", ...SessionCreateOpts }
 // ---------------------------------------------------------------------------
 app.post("/sessions", async (c) => {
   try {
-    const body = await c.req.json();
+    const body = await c.req.json<{ task: string; mode?: string } & Record<string, unknown>>();
     if (!body.task) {
       return c.json({ error: "task is required" }, 400);
     }
-    const session = createSession(body);
+
+    const mode = body.mode ?? "print";
+    if (mode !== "print" && mode !== "interactive") {
+      return c.json({ error: 'mode must be "print" or "interactive"' }, 400);
+    }
+
+    const session =
+      mode === "interactive"
+        ? await createInteractiveSession(body as any)
+        : createSession(body as any);
+
     return c.json(session, 201);
   } catch (err: any) {
     return c.json({ error: err.message }, 400);
@@ -73,8 +86,8 @@ app.get("/sessions", (c) => {
 // ---------------------------------------------------------------------------
 // GET /sessions/:id -- session detail with recent output
 // ---------------------------------------------------------------------------
-app.get("/sessions/:id", (c) => {
-  const session = getSession(c.req.param("id"));
+app.get("/sessions/:id", async (c) => {
+  const session = await getSession(c.req.param("id"));
   if (!session) return c.json({ error: "Not found" }, 404);
   return c.json(session);
 });
@@ -89,7 +102,7 @@ app.delete("/sessions/:id", (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /sessions/:id/input -- send stdin
+// POST /sessions/:id/input -- send input (stdin or tmux send-keys)
 // ---------------------------------------------------------------------------
 app.post("/sessions/:id/input", async (c) => {
   const body = await c.req.json<{ input: string }>();
@@ -101,26 +114,51 @@ app.post("/sessions/:id/input", async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// GET /sessions/:id/transcript -- read transcript file (interactive only)
+// Query: ?since=<byte-offset>  (omit for full transcript)
+// ---------------------------------------------------------------------------
+app.get("/sessions/:id/transcript", async (c) => {
+  const sinceParam = c.req.query("since");
+  const since = sinceParam !== undefined ? parseInt(sinceParam, 10) : undefined;
+
+  const text = await readTranscript(c.req.param("id"), since);
+  if (text === null) {
+    return c.json(
+      { error: "Not found or session has no transcript (print-mode sessions do not produce transcripts)" },
+      404
+    );
+  }
+
+  return new Response(text, {
+    headers: {
+      "content-type": "text/plain; charset=utf-8",
+      "x-transcript-length": String(text.length),
+    },
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Bun.serve with WebSocket support
 // ---------------------------------------------------------------------------
 
 const banner = `
-  🐒 monkeyproof v0.1.0
-  ──────────────────────────────────────
+  monkeyproof v0.1.0
+  ──────────────────────────────────────────────
   Port:     ${config.port}
   Max:      ${config.maxSessions} sessions
   Buffer:   ${config.outputBufferSize} lines
   TTL:      ${config.sessionTtlMs / 1000}s
   Int TTL:  ${config.interactiveSessionTtlMs / 1000}s
-  ──────────────────────────────────────
-  POST   /sessions          → spawn
-  GET    /sessions          → list
-  GET    /sessions/:id      → detail
-  DELETE /sessions/:id      → kill
-  POST   /sessions/:id/input → stdin
-  WS     /sessions/:id/ws   → stream
-  ──────────────────────────────────────
-  Trust the awesomeness.
+  ──────────────────────────────────────────────
+  POST   /sessions                → spawn
+  GET    /sessions                → list
+  GET    /sessions/:id            → detail
+  DELETE /sessions/:id            → kill
+  POST   /sessions/:id/input      → send input
+  GET    /sessions/:id/transcript → transcript (interactive)
+  WS     /sessions/:id/ws         → stream
+  ──────────────────────────────────────────────
+  Modes: print (default) | interactive (tmux)
 `;
 
 console.log(banner);
@@ -133,19 +171,18 @@ Bun.serve({
     // WebSocket upgrade for /sessions/:id/ws
     const wsMatch = url.pathname.match(/^\/sessions\/([^/]+)\/ws$/);
     if (wsMatch && req.headers.get("upgrade") === "websocket") {
-      const sessionId = wsMatch[1];
+      const sessionId = wsMatch[1]!;
 
       if (!sessionExists(sessionId)) {
         return new Response("Session not found", { status: 404 });
       }
 
-      // Auth via query param for WS
       const token = url.searchParams.get("token");
       if (token !== config.authToken) {
         return new Response("Unauthorized", { status: 401 });
       }
 
-      const success = server.upgrade(req, { data: { sessionId } });
+      const success = server.upgrade(req, { data: { sessionId } } as any);
       if (success) return undefined;
       return new Response("WebSocket upgrade failed", { status: 500 });
     }

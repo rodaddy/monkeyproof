@@ -38,6 +38,10 @@ const defaults = {
   interactiveSessionTtlMs: 7_200_000, // 2 hours
 } as const;
 
+/**
+ * Agent presets -- common command + args combos.
+ * Model names must match LiteLLM proxy aliases (10.71.1.33:4000).
+ */
 const defaultPresets: Record<string, Preset> = {
   claude: {
     command: "claude",
@@ -51,6 +55,14 @@ const defaultPresets: Record<string, Preset> = {
     command: "claude",
     args: ["--print", "--permission-mode", "bypassPermissions", "--model", "opus"],
   },
+  codex: {
+    command: "codex",
+    args: ["exec"],
+  },
+  "codex-auto": {
+    command: "codex",
+    args: ["exec", "--full-auto"],
+  },
   "claude-interactive": {
     command: "claude",
     args: ["--permission-mode", "bypassPermissions"],
@@ -62,14 +74,6 @@ const defaultPresets: Record<string, Preset> = {
   "claude-interactive-opus": {
     command: "claude",
     args: ["--permission-mode", "bypassPermissions", "--model", "opus"],
-  },
-  codex: {
-    command: "codex",
-    args: ["exec"],
-  },
-  "codex-auto": {
-    command: "codex",
-    args: ["exec", "--full-auto"],
   },
 };
 
