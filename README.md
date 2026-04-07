@@ -98,3 +98,53 @@ Built-in presets: `claude`, `claude-sonnet`, `codex`, `codex-auto`
 ## License
 
 MIT -- go nuts, monkeys.
+
+## Session Conventions
+
+When multiple orchestrators share a monkeyproof instance, use these conventions to avoid killing each other's sessions.
+
+### Task Prefix
+
+Tag every task with `[channel|repo]`:
+
+```bash
+curl -X POST http://localhost:3200/sessions \
+  -d '{"task": "[king-dev|king-trading] FIXER: fix all critical issues...", ...}'
+```
+
+### Label & Owner (planned -- see #6)
+
+- **label** -- defaults to repo name (last segment of `cwd`)
+- **owner** -- the spawning channel/session (e.g. `king-dev`, `skippy-inbox`)
+
+Until #6 lands, use the task prefix convention. Before clearing finished sessions, grep for your own tag so you don't nuke another orchestrator's results.
+
+### Presets
+
+| Preset | Command | Mode |
+|--------|---------|------|
+| `claude` | `claude --print --permission-mode bypassPermissions` | print (analysis) |
+| `claude-sonnet` | `claude --print --permission-mode bypassPermissions --model sonnet` | print |
+| `claude-opus` | `claude --print --permission-mode bypassPermissions --model opus` | print |
+| `codex` | `codex --approval-mode full-auto` | interactive |
+| `codex-auto` | `codex --approval-mode full-auto` | interactive |
+
+### Swarm Pattern
+
+For code review swarms, spawn multiple sessions per PR with different roles:
+
+```bash
+# Reviewer
+{"task": "[king-dev|king-trading] REVIEWER: read every file, check architecture...", ...}
+
+# Antagonist
+{"task": "[king-dev|king-trading] ANTAGONIST: try to break everything...", ...}
+
+# Tester
+{"task": "[king-dev|king-trading] TESTER: typecheck + write tests...", ...}
+
+# Fixer
+{"task": "[king-dev|king-trading] FIXER: fix all findings from review...", ...}
+```
+
+Run reviewer + antagonist first, then fixer, then verify. Repeat until clean.
