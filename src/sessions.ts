@@ -5,7 +5,7 @@
 
 import { spawn, type Subprocess } from "bun";
 import { randomUUID } from "crypto";
-import { config, presets } from "./config";
+import { config, presets, isInteractivePreset } from "./config";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -44,6 +44,7 @@ interface Session {
   task: string;
   cwd: string;
   command: string;
+  interactive: boolean;
   proc: Subprocess;
   status: "running" | "exited" | "killed";
   exitCode: number | null;
@@ -70,10 +71,14 @@ setInterval(() => {
   for (const [id, session] of sessions) {
     if (
       session.status !== "running" &&
-      session.endedAt &&
-      now - session.endedAt.getTime() > config.sessionTtlMs
+      session.endedAt
     ) {
-      sessions.delete(id);
+      const ttl = session.interactive
+        ? config.interactiveSessionTtlMs
+        : config.sessionTtlMs;
+      if (now - session.endedAt.getTime() > ttl) {
+        sessions.delete(id);
+      }
     }
   }
 }, 60_000);
@@ -98,14 +103,17 @@ export function createSession(opts: SessionCreateOpts): SessionInfo {
   // Resolve command + args from preset or explicit
   let command: string;
   let args: string[];
+  let interactive = false;
 
-  if (opts.preset && presets[opts.preset]) {
-    const preset = presets[opts.preset];
-    command = preset.command;
-    args = [...preset.args];
+  const resolvedPreset = opts.preset ? presets[opts.preset] : undefined;
+  if (opts.preset && resolvedPreset) {
+    command = resolvedPreset.command;
+    args = [...resolvedPreset.args];
+    interactive = isInteractivePreset(opts.preset);
   } else {
     command = opts.command || "claude";
     args = opts.args || ["--print", "--permission-mode", "bypassPermissions"];
+    interactive = !args.includes("--print");
   }
 
   // Add max-turns for claude
@@ -134,6 +142,7 @@ export function createSession(opts: SessionCreateOpts): SessionInfo {
     task: opts.task.slice(0, 500),
     cwd,
     command: `${command} ${args.slice(0, -1).join(" ")}`,
+    interactive,
     proc,
     status: "running",
     exitCode: null,

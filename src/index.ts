@@ -111,6 +111,7 @@ const banner = `
   Max:      ${config.maxSessions} sessions
   Buffer:   ${config.outputBufferSize} lines
   TTL:      ${config.sessionTtlMs / 1000}s
+  Int TTL:  ${config.interactiveSessionTtlMs / 1000}s
   ──────────────────────────────────────
   POST   /sessions          → spawn
   GET    /sessions          → list
