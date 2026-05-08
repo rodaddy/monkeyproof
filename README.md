@@ -93,7 +93,7 @@ curl -X POST http://localhost:3200/sessions \
   -d '{"task": "Fix the bug", "cwd": "/path/to/repo", "preset": "claude"}'
 ```
 
-Built-in presets: `claude`, `claude-sonnet`, `codex`, `codex-auto`
+Built-in presets: `claude`, `claude-sonnet`, `claude-opus`, `claude-haiku`, `codex`, `codex-auto`, `codex-gpt55`
 
 ## License
 

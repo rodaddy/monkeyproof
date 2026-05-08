@@ -14,6 +14,12 @@ export const config = {
 /**
  * Agent presets -- common command + args combos.
  * Model names must match LiteLLM proxy aliases (10.71.1.33:4000).
+ *
+ * LiteLLM aliases:
+ *   opus-nocache    -> Claude Opus
+ *   sonnet-nocache  -> Claude Sonnet
+ *   haiku-nocache   -> Claude Haiku
+ *   openai/gpt-5.5  -> OpenAI GPT-5.5 (direct/Codex sub)
  */
 export const presets: Record<string, { command: string; args: string[] }> = {
   claude: {
@@ -22,11 +28,15 @@ export const presets: Record<string, { command: string; args: string[] }> = {
   },
   "claude-sonnet": {
     command: "claude",
-    args: ["--print", "--permission-mode", "bypassPermissions", "--model", "sonnet"],
+    args: ["--print", "--permission-mode", "bypassPermissions", "--model", "sonnet-nocache"],
   },
   "claude-opus": {
     command: "claude",
-    args: ["--print", "--permission-mode", "bypassPermissions", "--model", "opus"],
+    args: ["--print", "--permission-mode", "bypassPermissions", "--model", "opus-nocache"],
+  },
+  "claude-haiku": {
+    command: "claude",
+    args: ["--print", "--permission-mode", "bypassPermissions", "--model", "haiku-nocache"],
   },
   codex: {
     command: "codex",
@@ -36,16 +46,24 @@ export const presets: Record<string, { command: string; args: string[] }> = {
     command: "codex",
     args: ["exec", "--full-auto"],
   },
+  "codex-gpt55": {
+    command: "codex",
+    args: ["exec", "--model", "openai/gpt-5.5"],
+  },
   "claude-interactive": {
     command: "claude",
     args: ["--permission-mode", "bypassPermissions"],
   },
   "claude-interactive-sonnet": {
     command: "claude",
-    args: ["--permission-mode", "bypassPermissions", "--model", "sonnet"],
+    args: ["--permission-mode", "bypassPermissions", "--model", "sonnet-nocache"],
   },
   "claude-interactive-opus": {
     command: "claude",
-    args: ["--permission-mode", "bypassPermissions", "--model", "opus"],
+    args: ["--permission-mode", "bypassPermissions", "--model", "opus-nocache"],
+  },
+  "claude-interactive-haiku": {
+    command: "claude",
+    args: ["--permission-mode", "bypassPermissions", "--model", "haiku-nocache"],
   },
 };
