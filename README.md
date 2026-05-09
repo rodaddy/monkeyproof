@@ -1,5 +1,7 @@
 # 🐒 monkeyproof
 
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/rodaddy)
+
 > Because letting the monkeys ssh into prod is how civilizations end.
 
 Remote coding agent orchestration server. Spawn, stream, and interact with AI coding sessions via REST + WebSocket.
