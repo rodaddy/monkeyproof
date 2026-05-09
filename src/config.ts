@@ -1,21 +1,62 @@
 /**
  * @module config
- * @description Server configuration from environment variables.
+ * @description Server configuration with file → env → defaults priority.
+ *
+ * Loading order:
+ * 1. monkeyproof.config.json (cwd or repo root)
+ * 2. Environment variables (override file values)
+ * 3. Hardcoded defaults (fallback)
  */
+
+import { existsSync, readFileSync } from "fs";
+import { join } from "path";
+
+interface ConfigFile {
+  port?: number;
+  authToken?: string;
+  maxSessions?: number;
+  outputBufferSize?: number;
+  sessionTtlMs?: number;
+  interactiveSessionTtlMs?: number;
+  presets?: Record<string, { command: string; args: string[] }>;
+}
+
+function loadConfigFile(): ConfigFile {
+  const paths = [
+    join(process.cwd(), "monkeyproof.config.json"),
+    join(__dirname, "..", "monkeyproof.config.json"),
+  ];
+
+  for (const p of paths) {
+    if (existsSync(p)) {
+      try {
+        const raw = readFileSync(p, "utf-8");
+        return JSON.parse(raw) as ConfigFile;
+      } catch (e) {
+        console.warn(`Warning: failed to parse ${p}:`, e);
+      }
+    }
+  }
+
+  return {};
+}
+
+const file = loadConfigFile();
 
 export const config = {
-  port: parseInt(process.env.PORT || "3200", 10),
-  authToken: process.env.AGENT_WS_TOKEN || "monkeyproof-dev",
-  maxSessions: parseInt(process.env.MAX_SESSIONS || "10", 10),
-  outputBufferSize: parseInt(process.env.OUTPUT_BUFFER_SIZE || "2000", 10),
-  sessionTtlMs: parseInt(process.env.SESSION_TTL_MS || "3600000", 10), // 1 hour
+  port: parseInt(process.env.PORT || String(file.port ?? 3200), 10),
+  authToken: process.env.AGENT_WS_TOKEN || file.authToken || "monkeyproof-dev",
+  maxSessions: parseInt(process.env.MAX_SESSIONS || String(file.maxSessions ?? 50), 10),
+  outputBufferSize: parseInt(process.env.OUTPUT_BUFFER_SIZE || String(file.outputBufferSize ?? 2000), 10),
+  sessionTtlMs: parseInt(process.env.SESSION_TTL_MS || String(file.sessionTtlMs ?? 3600000), 10),
+  interactiveSessionTtlMs: parseInt(
+    process.env.INTERACTIVE_SESSION_TTL_MS || String(file.interactiveSessionTtlMs ?? 7200000),
+    10,
+  ),
 };
 
-/**
- * Agent presets -- common command + args combos.
- * Model names must match LiteLLM proxy aliases (10.71.1.33:4000).
- */
-export const presets: Record<string, { command: string; args: string[] }> = {
+/** Default presets -- overridden by config file if present */
+const DEFAULT_PRESETS: Record<string, { command: string; args: string[] }> = {
   claude: {
     command: "claude",
     args: ["--print", "--permission-mode", "bypassPermissions"],
@@ -49,3 +90,26 @@ export const presets: Record<string, { command: string; args: string[] }> = {
     args: ["--permission-mode", "bypassPermissions", "--model", "opus"],
   },
 };
+
+export const presets: Record<string, { command: string; args: string[] }> =
+  file.presets && Object.keys(file.presets).length > 0 ? file.presets : DEFAULT_PRESETS;
+
+/**
+ * Check if a preset is interactive (no --print flag).
+ * Interactive sessions get a longer TTL.
+ */
+export function isInteractivePreset(presetName: string): boolean {
+  const preset = presets[presetName];
+  if (!preset) return false;
+  return !preset.args.includes("--print");
+}
+
+/**
+ * Get the appropriate TTL for a session based on its preset.
+ */
+export function getSessionTtl(presetName?: string): number {
+  if (presetName && isInteractivePreset(presetName)) {
+    return config.interactiveSessionTtlMs;
+  }
+  return config.sessionTtlMs;
+}
