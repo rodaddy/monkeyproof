@@ -80,7 +80,14 @@ app.post("/sessions", async (c) => {
 // GET /sessions -- list all sessions
 // ---------------------------------------------------------------------------
 app.get("/sessions", (c) => {
-  return c.json(listSessions());
+  const filter: Record<string, string> = {};
+  const owner = c.req.query("owner");
+  const label = c.req.query("label");
+  const status = c.req.query("status");
+  if (owner) filter.owner = owner;
+  if (label) filter.label = label;
+  if (status) filter.status = status as any;
+  return c.json(listSessions(Object.keys(filter).length > 0 ? filter as any : undefined));
 });
 
 // ---------------------------------------------------------------------------
