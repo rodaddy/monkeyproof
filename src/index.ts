@@ -121,25 +121,30 @@ app.post("/sessions/:id/input", async (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// GET /sessions/:id/transcript -- read transcript file (interactive only)
+// GET /sessions/:id/transcript -- read transcript file (print + interactive)
 // Query: ?since=<byte-offset>  (omit for full transcript)
 // ---------------------------------------------------------------------------
 app.get("/sessions/:id/transcript", async (c) => {
   const sinceParam = c.req.query("since");
   const since = sinceParam !== undefined ? parseInt(sinceParam, 10) : undefined;
 
-  const text = await readTranscript(c.req.param("id"), since);
-  if (text === null) {
+  const result = await readTranscript(c.req.param("id"), since);
+  if (result === null) {
     return c.json(
-      { error: "Not found or session has no transcript (print-mode sessions do not produce transcripts)" },
+      { error: "Not found or session has no transcript" },
       404
     );
   }
 
+  // Return offset metadata for polling
+  const { text, offset, totalSize } = result;
+
   return new Response(text, {
     headers: {
       "content-type": "text/plain; charset=utf-8",
-      "x-transcript-length": String(text.length),
+      "x-transcript-offset": String(offset),
+      "x-transcript-total-size": String(totalSize),
+      "x-transcript-next-offset": String(totalSize),
     },
   });
 });
@@ -161,7 +166,7 @@ const banner = `
   GET    /sessions/:id            → detail
   DELETE /sessions/:id            → kill
   POST   /sessions/:id/input      → send input
-  GET    /sessions/:id/transcript → transcript (interactive)
+  GET    /sessions/:id/transcript → transcript (print + interactive)
   WS     /sessions/:id/ws         → stream
   ──────────────────────────────────────────────
   Modes: print (default) | interactive (tmux)
