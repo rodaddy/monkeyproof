@@ -17,6 +17,7 @@ import {
   addWsClient,
   removeWsClient,
   sessionExists,
+  isSessionStatus,
 } from "./sessions";
 
 const app = new Hono();
@@ -80,7 +81,19 @@ app.post("/sessions", async (c) => {
 // GET /sessions -- list all sessions
 // ---------------------------------------------------------------------------
 app.get("/sessions", (c) => {
-  return c.json(listSessions());
+  const filter: Record<string, string> = {};
+  const owner = c.req.query("owner");
+  const label = c.req.query("label");
+  const status = c.req.query("status");
+  if (owner) filter.owner = owner;
+  if (label) filter.label = label;
+  if (status) {
+    if (!isSessionStatus(status)) {
+      return c.json({ error: 'status must be "running", "exited", or "killed"' }, 400);
+    }
+    filter.status = status;
+  }
+  return c.json(listSessions(Object.keys(filter).length > 0 ? filter as any : undefined));
 });
 
 // ---------------------------------------------------------------------------
@@ -114,25 +127,33 @@ app.post("/sessions/:id/input", async (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// GET /sessions/:id/transcript -- read transcript file (interactive only)
+// GET /sessions/:id/transcript -- read transcript file (print + interactive)
 // Query: ?since=<byte-offset>  (omit for full transcript)
 // ---------------------------------------------------------------------------
 app.get("/sessions/:id/transcript", async (c) => {
   const sinceParam = c.req.query("since");
-  const since = sinceParam !== undefined ? parseInt(sinceParam, 10) : undefined;
+  const since = sinceParam !== undefined ? Number(sinceParam) : undefined;
+  if (sinceParam !== undefined && (!Number.isFinite(since) || since! < 0)) {
+    return c.json({ error: "since must be a non-negative byte offset" }, 400);
+  }
 
-  const text = await readTranscript(c.req.param("id"), since);
-  if (text === null) {
+  const result = await readTranscript(c.req.param("id"), since);
+  if (result === null) {
     return c.json(
-      { error: "Not found or session has no transcript (print-mode sessions do not produce transcripts)" },
+      { error: "Not found or session has no transcript" },
       404
     );
   }
 
+  // Return offset metadata for polling
+  const { text, offset, totalSize } = result;
+
   return new Response(text, {
     headers: {
       "content-type": "text/plain; charset=utf-8",
-      "x-transcript-length": String(text.length),
+      "x-transcript-offset": String(offset),
+      "x-transcript-total-size": String(totalSize),
+      "x-transcript-next-offset": String(totalSize),
     },
   });
 });
@@ -147,14 +168,14 @@ const banner = `
   Port:     ${config.port}
   Max:      ${config.maxSessions} sessions
   Buffer:   ${config.outputBufferSize} lines
-  TTL:      ${config.sessionTtlMs / 1000}s
+  TTL:      ${config.sessionTtlMs / 1000}s print / ${config.interactiveSessionTtlMs / 1000}s interactive
   ──────────────────────────────────────────────
   POST   /sessions                → spawn
   GET    /sessions                → list
   GET    /sessions/:id            → detail
   DELETE /sessions/:id            → kill
   POST   /sessions/:id/input      → send input
-  GET    /sessions/:id/transcript → transcript (interactive)
+  GET    /sessions/:id/transcript → transcript (print + interactive)
   WS     /sessions/:id/ws         → stream
   ──────────────────────────────────────────────
   Modes: print (default) | interactive (tmux)
