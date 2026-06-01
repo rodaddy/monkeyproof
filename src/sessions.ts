@@ -8,6 +8,8 @@
 
 import { spawn, type Subprocess } from "bun";
 import { randomUUID } from "crypto";
+import { appendFile, mkdir, writeFile } from "fs/promises";
+import { resolve } from "path";
 import { config, presets } from "./config";
 
 // ---------------------------------------------------------------------------
@@ -118,7 +120,7 @@ export function createSession(opts: SessionCreateOpts): SessionInfo {
   }
 
   const id = randomUUID().slice(0, 8);
-  const cwd = opts.cwd || process.env.HOME || "/tmp";
+  const cwd = resolve(opts.cwd || process.env.HOME || "/tmp");
 
   let command: string;
   let args: string[];
@@ -151,14 +153,12 @@ export function createSession(opts: SessionCreateOpts): SessionInfo {
   });
 
   // Set up transcript file for print sessions too
-  const sessionDir = `${cwd}/.session`;
+  const sessionDir = resolve(cwd, ".session");
   const dateStr = new Date().toISOString().slice(0, 10);
-  const transcriptPath = `${sessionDir}/transcript-${dateStr}-${id}.md`;
-  try {
-    const { mkdirSync, writeFileSync } = require("fs");
-    mkdirSync(sessionDir, { recursive: true });
-    writeFileSync(transcriptPath, `# Session ${id}\n## Task: ${opts.task.slice(0, 200)}\n---\n`);
-  } catch {}
+  const transcriptPath = resolve(sessionDir, `transcript-${dateStr}-${id}.md`);
+  mkdir(sessionDir, { recursive: true })
+    .then(() => writeFile(transcriptPath, `# Session ${id}\n## Task: ${opts.task.slice(0, 200)}\n---\n`))
+    .catch(() => {});
 
   const session: Session = {
     id,
@@ -218,7 +218,7 @@ export async function createInteractiveSession(
   }
 
   const id = randomUUID().slice(0, 8);
-  const cwd = opts.cwd || process.env.HOME || "/tmp";
+  const cwd = resolve(opts.cwd || process.env.HOME || "/tmp");
   const tmuxName = `mp-${id}`;
 
   // Resolve command + args (strip --print if present)
@@ -240,8 +240,8 @@ export async function createInteractiveSession(
 
   // Transcript path: <cwd>/.session/transcript-<date>-<id>.md
   const dateStr = new Date().toISOString().slice(0, 10);
-  const sessionDir = `${cwd}/.session`;
-  const transcriptPath = `${sessionDir}/transcript-${dateStr}-${id}.md`;
+  const sessionDir = resolve(cwd, ".session");
+  const transcriptPath = resolve(sessionDir, `transcript-${dateStr}-${id}.md`);
 
   await Bun.$`mkdir -p ${sessionDir}`.quiet();
 
@@ -344,12 +344,10 @@ export async function readTranscript(
   try {
     const file = Bun.file(session.transcriptPath);
     if (!(await file.exists())) return { text: "", offset: 0, totalSize: 0 };
-    const text = await file.text();
-    const totalSize = text.length;
-    if (since !== undefined && since > 0) {
-      return { text: text.slice(since), offset: since, totalSize };
-    }
-    return { text, offset: 0, totalSize };
+    const totalSize = file.size;
+    const offset = Math.max(0, Math.min(Math.trunc(since ?? 0), totalSize));
+    const bytes = await file.slice(offset).arrayBuffer();
+    return { text: new TextDecoder().decode(bytes), offset, totalSize };
   } catch {
     return null;
   }
@@ -532,8 +530,7 @@ function streamReader(
         // Tee to transcript file
         if (session.transcriptPath) {
           try {
-            const { appendFileSync } = require("fs");
-            appendFileSync(session.transcriptPath, text);
+            appendFile(session.transcriptPath, text).catch(() => {});
           } catch {}
         }
 

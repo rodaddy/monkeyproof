@@ -126,7 +126,10 @@ app.post("/sessions/:id/input", async (c) => {
 // ---------------------------------------------------------------------------
 app.get("/sessions/:id/transcript", async (c) => {
   const sinceParam = c.req.query("since");
-  const since = sinceParam !== undefined ? parseInt(sinceParam, 10) : undefined;
+  const since = sinceParam !== undefined ? Number(sinceParam) : undefined;
+  if (sinceParam !== undefined && (!Number.isFinite(since) || since! < 0)) {
+    return c.json({ error: "since must be a non-negative byte offset" }, 400);
+  }
 
   const result = await readTranscript(c.req.param("id"), since);
   if (result === null) {

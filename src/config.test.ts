@@ -44,14 +44,14 @@ describe("presets", () => {
   });
 
   test("claude presets use --print flag", () => {
-    expect(presets["claude"].args).toContain("--print");
-    expect(presets["claude-sonnet"].args).toContain("--print");
-    expect(presets["claude-opus"].args).toContain("--print");
+    expect(presets["claude"]!.args).toContain("--print");
+    expect(presets["claude-sonnet"]!.args).toContain("--print");
+    expect(presets["claude-opus"]!.args).toContain("--print");
   });
 
   test("interactive presets do NOT have --print flag", () => {
-    expect(presets["claude-interactive"].args).not.toContain("--print");
-    expect(presets["claude-interactive-sonnet"].args).not.toContain("--print");
+    expect(presets["claude-interactive"]!.args).not.toContain("--print");
+    expect(presets["claude-interactive-sonnet"]!.args).not.toContain("--print");
   });
 
   test("all presets bypass permissions", () => {
@@ -62,22 +62,22 @@ describe("presets", () => {
   });
 
   test("sonnet presets use --model sonnet", () => {
-    expect(presets["claude-sonnet"].args).toContain("sonnet");
-    expect(presets["claude-interactive-sonnet"].args).toContain("sonnet");
+    expect(presets["claude-sonnet"]!.args).toContain("sonnet");
+    expect(presets["claude-interactive-sonnet"]!.args).toContain("sonnet");
   });
 
   test("opus presets use --model opus", () => {
-    expect(presets["claude-opus"].args).toContain("opus");
-    expect(presets["claude-interactive-opus"].args).toContain("opus");
+    expect(presets["claude-opus"]!.args).toContain("opus");
+    expect(presets["claude-interactive-opus"]!.args).toContain("opus");
   });
 
   test("codex presets use codex command", () => {
-    expect(presets["codex"].command).toBe("codex");
-    expect(presets["codex-auto"].command).toBe("codex");
+    expect(presets["codex"]!.command).toBe("codex");
+    expect(presets["codex-auto"]!.command).toBe("codex");
   });
 
   test("codex-auto uses --full-auto", () => {
-    expect(presets["codex-auto"].args).toContain("--full-auto");
+    expect(presets["codex-auto"]!.args).toContain("--full-auto");
   });
 
   test("every preset has command and args", () => {
