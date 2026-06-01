@@ -51,7 +51,7 @@ AGENT_WS_TOKEN=your-secret-token bun run src/index.ts
 
 ```bash
 curl -X POST http://localhost:3200/sessions \
-  -H "Authorization: Bearer your-s...ken" \
+  -H "Authorization: Bearer ***" \
   -H "Content-Type: application/json" \
   -d '{
     "task": "bun test",
