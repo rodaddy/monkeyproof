@@ -11,8 +11,8 @@ describe("config", () => {
     expect(config.port).toBe(3200);
   });
 
-  test("default auth token is a placeholder, not a plaintext shared secret", () => {
-    expect(config.authToken).toBe("CHANGE_ME_AGENT_WS_TOKEN");
+  test("auth token defaults to placeholder but honors environment override", () => {
+    expect(config.authToken).toBe(process.env.AGENT_WS_TOKEN || "CHANGE_ME_AGENT_WS_TOKEN");
     expect(config.authToken).not.toBe("monkeyproof-dev");
   });
 

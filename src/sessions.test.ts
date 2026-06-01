@@ -20,6 +20,15 @@ async function tmpCwd(): Promise<string> {
   return dir;
 }
 
+async function waitForSessionExit(id: string) {
+  for (let i = 0; i < 80; i++) {
+    const detail = await getSession(id);
+    if (detail?.status === "exited") return detail;
+    await Bun.sleep(25);
+  }
+  return getSession(id);
+}
+
 afterEach(async () => {
   for (const session of listSessions()) {
     killSession(session.id);
@@ -73,6 +82,49 @@ describe("sessions", () => {
     }
 
     expect((await readTranscript(session.id))?.text).toContain("print-task-arg");
+  });
+
+  test("rejects presets for direct exec sessions", async () => {
+    const cwd = await tmpCwd();
+
+    expect(() =>
+      createSession({
+        task: "echo should-not-run",
+        cwd,
+        type: "exec",
+        preset: "claude",
+      }),
+    ).toThrow(/preset is only valid/);
+  });
+
+  test("preserves full task while exposing a bounded taskPreview", async () => {
+    const cwd = await tmpCwd();
+    const task = `printf done # ${"x".repeat(800)}`;
+    const session = createSession({ task, cwd });
+    const detail = await waitForSessionExit(session.id);
+    const transcript = await readTranscript(session.id);
+
+    expect(session.task).toBe(task);
+    expect(session.taskPreview).toBe(task.slice(0, 500));
+    expect(session.taskPreview.length).toBe(500);
+    expect(detail?.task).toBe(task);
+    expect(transcript?.text).toContain(task);
+  });
+
+  test("records stderr with labels and nonzero exit codes", async () => {
+    const cwd = await tmpCwd();
+    const session = createSession({
+      task: "bun --eval \"console.error('bad-news'); process.exit(7)\"",
+      cwd,
+    });
+
+    const detail = await waitForSessionExit(session.id);
+    const transcript = await readTranscript(session.id);
+
+    expect(detail?.status).toBe("exited");
+    expect(detail?.exitCode).toBe(7);
+    expect(detail?.recentOutput).toContain("[stderr] bad-news");
+    expect(transcript?.text).toContain("[stderr] bad-news");
   });
 
   test("persists owner and labels and supports filters", async () => {

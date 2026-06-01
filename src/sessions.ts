@@ -49,6 +49,7 @@ export interface SessionFilter {
 export interface SessionInfo {
   id: string;
   task: string;
+  taskPreview: string;
   cwd: string;
   command: string;
   type: SessionType;
@@ -71,6 +72,7 @@ export interface SessionDetail extends SessionInfo {
 interface Session {
   id: string;
   task: string;
+  taskPreview: string;
   cwd: string;
   command: string;
   type: SessionType;
@@ -141,6 +143,10 @@ export function createSession(opts: SessionCreateOpts): SessionInfo {
 
   const sessionType = opts.type ?? opts.mode ?? "exec";
 
+  if (sessionType === "exec" && opts.preset) {
+    throw new Error('preset is only valid for type "print" or "interactive"; omit preset for exec sessions');
+  }
+
   if (sessionType === "exec") {
     command = opts.command || "/bin/sh";
     args = opts.args ? [...opts.args, opts.task] : ["-lc", opts.task];
@@ -178,12 +184,13 @@ export function createSession(opts: SessionCreateOpts): SessionInfo {
   const dateStr = new Date().toISOString().slice(0, 10);
   const transcriptPath = resolve(sessionDir, `transcript-${dateStr}-${id}.md`);
   const transcriptReady = mkdir(sessionDir, { recursive: true })
-    .then(() => writeFile(transcriptPath, `# Session ${id}\n## Task: ${opts.task.slice(0, 200)}\n---\n`))
+    .then(() => writeFile(transcriptPath, `# Session ${id}\n## Task\n\n${opts.task}\n\n---\n`))
     .catch(() => {});
 
   const session: Session = {
     id,
-    task: opts.task.slice(0, 500),
+    task: opts.task,
+    taskPreview: opts.task.slice(0, 500),
     cwd,
     command: sessionType === "exec" ? `${command} ${args.join(" ")}` : `${command} ${args.slice(0, -1).join(" ")}`,
     type: sessionType,
@@ -289,7 +296,8 @@ export async function createInteractiveSession(
 
   const session: Session = {
     id,
-    task: opts.task.slice(0, 500),
+    task: opts.task,
+    taskPreview: opts.task.slice(0, 500),
     cwd,
     command: claudeCmd,
     type: "interactive",
@@ -563,12 +571,13 @@ function streamReader(
         const { done, value } = await reader.read();
         if (done) break;
         const text = decoder.decode(value);
-        session.output.push(text);
+        const labeledText = channel === "stderr" ? `[stderr] ${text}` : text;
+        session.output.push(labeledText);
 
         // Tee to transcript file
         if (session.transcriptPath) {
           session.transcriptReady
-            ?.then(() => appendFile(session.transcriptPath!, text))
+            ?.then(() => appendFile(session.transcriptPath!, labeledText))
             .catch(() => {});
         }
 
@@ -604,6 +613,7 @@ function toInfo(session: Session): SessionInfo {
   return {
     id: session.id,
     task: session.task,
+    taskPreview: session.taskPreview,
     cwd: session.cwd,
     command: session.command,
     type: session.type,
