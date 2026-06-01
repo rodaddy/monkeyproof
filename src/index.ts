@@ -52,19 +52,21 @@ app.get("/health", (c) => c.json({ ok: true }));
 
 // ---------------------------------------------------------------------------
 // POST /sessions -- spawn a new session
-// Body: { task, mode?: "print" | "interactive", ...SessionCreateOpts }
+// Body: { task, type?: "exec" | "print" | "interactive", mode?: same, ...SessionCreateOpts }
+// Defaults to direct shell exec. Claude print/interactive modes must be explicit.
 // ---------------------------------------------------------------------------
 app.post("/sessions", async (c) => {
   try {
-    const body = await c.req.json<{ task: string; mode?: string } & Record<string, unknown>>();
+    const body = await c.req.json<{ task: string; type?: string; mode?: string } & Record<string, unknown>>();
     if (!body.task) {
       return c.json({ error: "task is required" }, 400);
     }
 
-    const mode = body.mode ?? "print";
-    if (mode !== "print" && mode !== "interactive") {
-      return c.json({ error: 'mode must be "print" or "interactive"' }, 400);
+    const mode = body.type ?? body.mode ?? "exec";
+    if (mode !== "exec" && mode !== "print" && mode !== "interactive") {
+      return c.json({ error: 'type/mode must be "exec", "print", or "interactive"' }, 400);
     }
+    body.type = mode;
 
     const session =
       mode === "interactive"
@@ -178,7 +180,7 @@ const banner = `
   GET    /sessions/:id/transcript → transcript (print + interactive)
   WS     /sessions/:id/ws         → stream
   ──────────────────────────────────────────────
-  Modes: print (default) | interactive (tmux)
+  Modes: exec (default shell command) | print (agent CLI) | interactive (tmux)
 `;
 
 console.log(banner);

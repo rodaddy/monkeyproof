@@ -26,6 +26,10 @@ A lightweight process manager that lets an AI orchestrator (or you, monkey) spaw
 - **Auth:** Bearer token
 - **Storage:** In-memory (sessions are ephemeral)
 
+## Security
+
+MonkeyProof executes commands on the host where it runs. Bind it only on trusted networks, always set a strong `AGENT_WS_TOKEN`, and treat built-in agent presets as privileged because Claude presets include `--permission-mode bypassPermissions` for unattended work. Use direct `exec` with explicit commands when that permission mode is not appropriate.
+
 ## API
 
 ```
@@ -42,16 +46,47 @@ WS     /sessions/:id/ws       Real-time output stream + input
 
 ```bash
 bun install
-AGENT_WS_TOKEN=your-secret-token bun run src/index.ts
+AGENT_WS_TOKEN=YOUR_STRONG_SECRET bun run src/index.ts
 ```
 
-## Spawn a session
+All HTTP endpoints require bearer authentication:
+
+```bash
+-H "Authorization: Bearer YOUR_STRONG_SECRET"
+```
+
+## Spawn a direct exec session (default)
+
+`POST /sessions` defaults to direct shell execution (`type: "exec"`). MonkeyProof runs the full `task` with `/bin/sh -lc` unless you pass an explicit `command`/`args`. This is the preferred path for normal automation and maintenance work because MonkeyProof executes the command directly instead of routing through Claude middleware.
 
 ```bash
 curl -X POST http://localhost:3200/sessions \
-  -H "Authorization: Bearer your-secret-token" \
+  -H "Authorization: Bearer YOUR_STRONG_SECRET" \
   -H "Content-Type: application/json" \
   -d '{
+    "task": "bun test",
+    "cwd": "/home/skippy/Development/king/king-dashboard"
+  }'
+```
+
+You can also be explicit:
+
+```json
+{ "type": "exec", "task": "scripts/maintenance --dry-run", "cwd": "/path/to/repo" }
+```
+
+`mode` is accepted as a backwards-compatible alias for `type`. Presets are not valid for `exec` sessions; set `type: "print"` or `type: "interactive"` when using `preset`.
+
+## Spawn an agent print session
+
+Claude/Codex print sessions are still supported, but they must be requested explicitly with `type: "print"` (or `mode: "print"`).
+
+```bash
+curl -X POST http://localhost:3200/sessions \
+  -H "Authorization: Bearer YOUR_STRONG_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "print",
     "task": "Fix the bug in auth.ts",
     "cwd": "/home/skippy/Development/king/king-dashboard",
     "command": "claude",
@@ -63,10 +98,11 @@ curl -X POST http://localhost:3200/sessions \
 ## Stream output via WebSocket
 
 ```javascript
-const ws = new WebSocket("ws://localhost:3200/sessions/abc123/ws?token=your-secret-token");
+const ws = new WebSocket("ws://localhost:3200/sessions/abc123/ws?token=YOUR_STRONG_SECRET");
 ws.onmessage = (e) => {
   const msg = JSON.parse(e.data);
   if (msg.type === "stdout") process.stdout.write(msg.data);
+  if (msg.type === "stderr") process.stderr.write(msg.data);
   if (msg.type === "exit") console.log(`Done: exit ${msg.code}`);
 };
 // Send stdin
@@ -84,16 +120,15 @@ ws.send(JSON.stringify({ type: "stdin", data: "yes\n" }));
 | `SESSION_TTL_MS` | `3600000` | Auto-cleanup exited sessions after (ms) |
 | `INTERACTIVE_SESSION_TTL_MS` | `7200000` | Auto-cleanup exited interactive tmux sessions after (ms) |
 
-> Built-in Claude presets include `--permission-mode bypassPermissions` for unattended agent work. Use them only in trusted workspaces, or pass explicit `command`/`args` if that permission mode is not appropriate.
-
 ## Agent Presets
 
-Instead of specifying `command` + `args` every time, use presets:
+Instead of specifying `command` + `args` every time for print/interactive agent sessions, use presets and set `type`/`mode` explicitly:
 
 ```bash
 curl -X POST http://localhost:3200/sessions \
-  -H "Authorization: Bearer your-secret-token" \
-  -d '{"task": "Fix the bug", "cwd": "/path/to/repo", "preset": "claude"}'
+  -H "Authorization: Bearer YOUR_STRONG_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"type": "print", "task": "Fix the bug", "cwd": "/path/to/repo", "preset": "claude"}'
 ```
 
 Built-in presets: `claude`, `claude-sonnet`, `claude-opus`, `claude-interactive`, `claude-interactive-sonnet`, `claude-interactive-opus`, `codex`, `codex-auto`
