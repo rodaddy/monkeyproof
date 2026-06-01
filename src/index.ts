@@ -17,6 +17,7 @@ import {
   addWsClient,
   removeWsClient,
   sessionExists,
+  isSessionStatus,
 } from "./sessions";
 
 const app = new Hono();
@@ -86,7 +87,12 @@ app.get("/sessions", (c) => {
   const status = c.req.query("status");
   if (owner) filter.owner = owner;
   if (label) filter.label = label;
-  if (status) filter.status = status as any;
+  if (status) {
+    if (!isSessionStatus(status)) {
+      return c.json({ error: 'status must be "running", "exited", or "killed"' }, 400);
+    }
+    filter.status = status;
+  }
   return c.json(listSessions(Object.keys(filter).length > 0 ? filter as any : undefined));
 });
 
@@ -162,7 +168,7 @@ const banner = `
   Port:     ${config.port}
   Max:      ${config.maxSessions} sessions
   Buffer:   ${config.outputBufferSize} lines
-  TTL:      ${config.sessionTtlMs / 1000}s
+  TTL:      ${config.sessionTtlMs / 1000}s print / ${config.interactiveSessionTtlMs / 1000}s interactive
   ──────────────────────────────────────────────
   POST   /sessions                → spawn
   GET    /sessions                → list

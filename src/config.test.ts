@@ -11,8 +11,9 @@ describe("config", () => {
     expect(config.port).toBe(3200);
   });
 
-  test("default auth token is monkeyproof-dev", () => {
-    expect(config.authToken).toBe("monkeyproof-dev");
+  test("default auth token is a placeholder, not a plaintext shared secret", () => {
+    expect(config.authToken).toBe("CHANGE_ME_AGENT_WS_TOKEN");
+    expect(config.authToken).not.toBe("monkeyproof-dev");
   });
 
   test("maxSessions is a positive number", () => {
@@ -25,6 +26,10 @@ describe("config", () => {
 
   test("sessionTtlMs is at least 1 minute", () => {
     expect(config.sessionTtlMs).toBeGreaterThanOrEqual(60_000);
+  });
+
+  test("interactiveSessionTtlMs is at least 1 minute", () => {
+    expect(config.interactiveSessionTtlMs).toBeGreaterThanOrEqual(60_000);
   });
 });
 

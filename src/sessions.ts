@@ -28,10 +28,17 @@ export interface SessionCreateOpts {
   labels?: string[];
 }
 
+export const SESSION_STATUSES = ["running", "exited", "killed"] as const;
+export type SessionStatus = (typeof SESSION_STATUSES)[number];
+
+export function isSessionStatus(value: string): value is SessionStatus {
+  return (SESSION_STATUSES as readonly string[]).includes(value);
+}
+
 export interface SessionFilter {
   owner?: string;
   label?: string;
-  status?: "running" | "exited" | "killed";
+  status?: SessionStatus;
 }
 
 export interface SessionInfo {
@@ -40,7 +47,7 @@ export interface SessionInfo {
   cwd: string;
   command: string;
   type: "print" | "interactive";
-  status: "running" | "exited" | "killed";
+  status: SessionStatus;
   exitCode: number | null;
   pid: number | null;
   createdAt: string;
@@ -64,6 +71,7 @@ interface Session {
   type: "print" | "interactive";
   owner: string | null;
   labels: string[];
+  pid: number | null;
   // print-only
   proc?: Subprocess;
   // interactive-only
@@ -71,8 +79,9 @@ interface Session {
   transcriptPath?: string;
   _pollTimer?: ReturnType<typeof setInterval>;
   _lastCapturedLength: number;
+  transcriptReady?: Promise<void>;
   // shared
-  status: "running" | "exited" | "killed";
+  status: SessionStatus;
   exitCode: number | null;
   createdAt: Date;
   endedAt: Date | null;
@@ -156,7 +165,7 @@ export function createSession(opts: SessionCreateOpts): SessionInfo {
   const sessionDir = resolve(cwd, ".session");
   const dateStr = new Date().toISOString().slice(0, 10);
   const transcriptPath = resolve(sessionDir, `transcript-${dateStr}-${id}.md`);
-  mkdir(sessionDir, { recursive: true })
+  const transcriptReady = mkdir(sessionDir, { recursive: true })
     .then(() => writeFile(transcriptPath, `# Session ${id}\n## Task: ${opts.task.slice(0, 200)}\n---\n`))
     .catch(() => {});
 
@@ -167,7 +176,8 @@ export function createSession(opts: SessionCreateOpts): SessionInfo {
     command: `${command} ${args.slice(0, -1).join(" ")}`,
     type: "print",
     owner: opts.owner || null,
-    labels: opts.labels || [],
+    labels: normalizeLabels(opts.labels),
+    pid: proc.pid ?? null,
     proc,
     _lastCapturedLength: 0,
     status: "running",
@@ -177,6 +187,7 @@ export function createSession(opts: SessionCreateOpts): SessionInfo {
     output: [],
     wsClients: new Set(),
     transcriptPath,
+    transcriptReady,
   };
 
   sessions.set(id, session);
@@ -247,6 +258,8 @@ export async function createInteractiveSession(
 
   // Create tmux session
   await Bun.$`tmux new-session -d -s ${tmuxName} -x 200 -y 50`;
+  const panePidResult = await Bun.$`tmux display-message -p -t ${tmuxName} #{pane_pid}`.quiet();
+  const panePid = Number.parseInt(panePidResult.text().trim(), 10);
 
   // Pipe all pane output to transcript file
   const pipeCmd = `cat >> "${transcriptPath}"`;
@@ -269,7 +282,8 @@ export async function createInteractiveSession(
     command: claudeCmd,
     type: "interactive",
     owner: opts.owner || null,
-    labels: opts.labels || [],
+    labels: normalizeLabels(opts.labels),
+    pid: Number.isFinite(panePid) ? panePid : null,
     tmuxName,
     transcriptPath,
     _lastCapturedLength: 0,
@@ -344,10 +358,10 @@ export async function readTranscript(
   try {
     const file = Bun.file(session.transcriptPath);
     if (!(await file.exists())) return { text: "", offset: 0, totalSize: 0 };
-    const totalSize = file.size;
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const totalSize = bytes.byteLength;
     const offset = Math.max(0, Math.min(Math.trunc(since ?? 0), totalSize));
-    const bytes = await file.slice(offset).arrayBuffer();
-    return { text: new TextDecoder().decode(bytes), offset, totalSize };
+    return { text: new TextDecoder().decode(bytes.slice(offset)), offset, totalSize };
   } catch {
     return null;
   }
@@ -381,6 +395,8 @@ export function killSession(id: string): boolean {
  * Returns the number of sessions killed.
  */
 export function killSessionsByFilter(filter: SessionFilter): number {
+  if (!filter.owner && !filter.label && !filter.status) return 0;
+
   let killed = 0;
   for (const [id, session] of sessions) {
     if (filter.owner && session.owner !== filter.owner) continue;
@@ -509,6 +525,16 @@ function startTmuxPoller(session: Session): void {
   session._pollTimer = timer;
 }
 
+function normalizeLabels(labels?: string[]): string[] {
+  return Array.from(
+    new Set(
+      (labels ?? [])
+        .map((label) => label.trim().toLowerCase().slice(0, 64))
+        .filter(Boolean),
+    ),
+  );
+}
+
 function streamReader(
   session: Session,
   stream: ReadableStream<Uint8Array> | null,
@@ -529,9 +555,9 @@ function streamReader(
 
         // Tee to transcript file
         if (session.transcriptPath) {
-          try {
-            appendFile(session.transcriptPath, text).catch(() => {});
-          } catch {}
+          session.transcriptReady
+            ?.then(() => appendFile(session.transcriptPath!, text))
+            .catch(() => {});
         }
 
         while (session.output.length > config.outputBufferSize) {
@@ -571,7 +597,7 @@ function toInfo(session: Session): SessionInfo {
     type: session.type,
     status: session.status,
     exitCode: session.exitCode,
-    pid: session.proc?.pid ?? null,
+    pid: session.pid,
     createdAt: session.createdAt.toISOString(),
     endedAt: session.endedAt?.toISOString() || null,
     outputLines: session.output.length,

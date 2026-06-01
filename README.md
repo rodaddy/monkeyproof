@@ -78,10 +78,13 @@ ws.send(JSON.stringify({ type: "stdin", data: "yes\n" }));
 | Env Var | Default | Description |
 |---------|---------|-------------|
 | `PORT` | `3200` | Server port |
-| `AGENT_WS_TOKEN` | `monkeyproof-dev` | Bearer auth token |
-| `MAX_SESSIONS` | `10` | Max concurrent sessions |
+| `AGENT_WS_TOKEN` | `CHANGE_ME_AGENT_WS_TOKEN` | Bearer auth token. Replace before exposing the service; the placeholder is intentionally unsafe. |
+| `MAX_SESSIONS` | `50` | Max concurrent sessions |
 | `OUTPUT_BUFFER_SIZE` | `2000` | Lines of output to buffer per session |
 | `SESSION_TTL_MS` | `3600000` | Auto-cleanup exited sessions after (ms) |
+| `INTERACTIVE_SESSION_TTL_MS` | `7200000` | Auto-cleanup exited interactive tmux sessions after (ms) |
+
+> Built-in Claude presets include `--permission-mode bypassPermissions` for unattended agent work. Use them only in trusted workspaces, or pass explicit `command`/`args` if that permission mode is not appropriate.
 
 ## Agent Presets
 
@@ -93,7 +96,7 @@ curl -X POST http://localhost:3200/sessions \
   -d '{"task": "Fix the bug", "cwd": "/path/to/repo", "preset": "claude"}'
 ```
 
-Built-in presets: `claude`, `claude-sonnet`, `codex`, `codex-auto`
+Built-in presets: `claude`, `claude-sonnet`, `claude-opus`, `claude-interactive`, `claude-interactive-sonnet`, `claude-interactive-opus`, `codex`, `codex-auto`
 
 ## License
 

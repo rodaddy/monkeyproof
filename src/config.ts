@@ -8,7 +8,6 @@
  * 3. Hardcoded defaults (fallback)
  */
 
-import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 
 interface ConfigFile {
@@ -21,17 +20,19 @@ interface ConfigFile {
   presets?: Record<string, { command: string; args: string[] }>;
 }
 
-function loadConfigFile(): ConfigFile {
+const DEFAULT_AUTH_TOKEN = "CHANGE_ME_AGENT_WS_TOKEN";
+
+async function loadConfigFile(): Promise<ConfigFile> {
   const paths = [
     join(process.cwd(), "monkeyproof.config.json"),
-    join(__dirname, "..", "monkeyproof.config.json"),
+    join(import.meta.dir, "..", "monkeyproof.config.json"),
   ];
 
   for (const p of paths) {
-    if (existsSync(p)) {
+    const file = Bun.file(p);
+    if (await file.exists()) {
       try {
-        const raw = readFileSync(p, "utf-8");
-        return JSON.parse(raw) as ConfigFile;
+        return JSON.parse(await file.text()) as ConfigFile;
       } catch (e) {
         console.warn(`Warning: failed to parse ${p}:`, e);
       }
@@ -41,11 +42,18 @@ function loadConfigFile(): ConfigFile {
   return {};
 }
 
-const file = loadConfigFile();
+const file = await loadConfigFile();
+const authToken = process.env.AGENT_WS_TOKEN || file.authToken || DEFAULT_AUTH_TOKEN;
+
+if (authToken === DEFAULT_AUTH_TOKEN) {
+  console.warn(
+    "Warning: AGENT_WS_TOKEN is not configured; using CHANGE_ME_AGENT_WS_TOKEN placeholder. Set a strong token before exposing monkeyproof.",
+  );
+}
 
 export const config = {
   port: parseInt(process.env.PORT || String(file.port ?? 3200), 10),
-  authToken: process.env.AGENT_WS_TOKEN || file.authToken || "monkeyproof-dev",
+  authToken,
   maxSessions: parseInt(process.env.MAX_SESSIONS || String(file.maxSessions ?? 50), 10),
   outputBufferSize: parseInt(process.env.OUTPUT_BUFFER_SIZE || String(file.outputBufferSize ?? 2000), 10),
   sessionTtlMs: parseInt(process.env.SESSION_TTL_MS || String(file.sessionTtlMs ?? 3600000), 10),

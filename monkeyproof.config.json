@@ -1,6 +1,6 @@
 {
   "port": 3200,
-  "authToken": "monkeyproof-dev",
+  "authToken": "CHANGE_ME_AGENT_WS_TOKEN",
   "maxSessions": 50,
   "outputBufferSize": 2000,
   "sessionTtlMs": 3600000,

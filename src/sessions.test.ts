@@ -8,6 +8,8 @@ import {
   killSession,
   listSessions,
   readTranscript,
+  killSessionsByFilter,
+  isSessionStatus,
 } from "./sessions";
 
 const tempDirs: string[] = [];
@@ -36,7 +38,7 @@ describe("sessions", () => {
       command: "bun",
       args: ["--eval", "console.log('hello')"],
       owner: "bilby",
-      labels: ["maintenance", "mp"],
+      labels: [" Maintenance ", "MP", "mp"],
     });
 
     await Bun.sleep(50);
@@ -52,6 +54,26 @@ describe("sessions", () => {
       await Bun.sleep(25);
     }
     expect(listSessions({ status: "exited" }).map((s) => s.id)).toContain(session.id);
+  });
+
+  test("validates session status query values", () => {
+    expect(isSessionStatus("running")).toBe(true);
+    expect(isSessionStatus("exited")).toBe(true);
+    expect(isSessionStatus("killed")).toBe(true);
+    expect(isSessionStatus("bogus")).toBe(false);
+  });
+
+  test("refuses empty-filter bulk kill", async () => {
+    const cwd = await tmpCwd();
+    const session = createSession({
+      task: "long",
+      cwd,
+      command: "bun",
+      args: ["--eval", "setTimeout(() => {}, 10000)"],
+    });
+
+    expect(killSessionsByFilter({})).toBe(0);
+    await expect(getSession(session.id)).resolves.toMatchObject({ status: "running" });
   });
 
   test("uses byte offsets for transcript polling", async () => {
@@ -90,5 +112,25 @@ describe("sessions", () => {
 
     expect(detail?.cwd).toStartWith("/");
     expect(detail?.transcriptPath).toStartWith(`${detail?.cwd}/.session/`);
+  });
+
+  test("empty bulk-kill filter is a no-op", async () => {
+    const cwd = await tmpCwd();
+    const session = createSession({
+      task: "long",
+      cwd,
+      command: "bun",
+      args: ["--eval", "setTimeout(() => {}, 2000)"],
+    });
+
+    expect(killSessionsByFilter({})).toBe(0);
+    expect((await getSession(session.id))?.status).toBe("running");
+  });
+
+  test("validates known session statuses", () => {
+    expect(isSessionStatus("running")).toBe(true);
+    expect(isSessionStatus("exited")).toBe(true);
+    expect(isSessionStatus("killed")).toBe(true);
+    expect(isSessionStatus("wat")).toBe(false);
   });
 });
