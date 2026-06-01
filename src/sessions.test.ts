@@ -30,6 +30,51 @@ afterEach(async () => {
 });
 
 describe("sessions", () => {
+  test("defaults to direct exec mode and runs task through a shell", async () => {
+    const cwd = await tmpCwd();
+    const session = createSession({
+      task: "printf 'direct-exec:%s' \"$PWD\"",
+      cwd,
+    });
+
+    expect(session.type).toBe("exec");
+    expect(session.command).toContain("/bin/sh -lc");
+
+    for (let i = 0; i < 40; i++) {
+      const transcript = await readTranscript(session.id);
+      if (transcript?.text.includes("direct-exec:")) break;
+      await Bun.sleep(25);
+    }
+
+    const detail = await getSession(session.id);
+    const transcript = await readTranscript(session.id);
+    expect(detail?.status).toBe("exited");
+    expect(detail?.exitCode).toBe(0);
+    expect(transcript?.text).toContain(`direct-exec:${cwd}`);
+  });
+
+  test("explicit print mode keeps agent-style task argument behavior", async () => {
+    const cwd = await tmpCwd();
+    const session = createSession({
+      type: "print",
+      task: "print-task-arg",
+      cwd,
+      command: "bun",
+      args: ["--eval", "console.log(process.argv.at(-1))"],
+    });
+
+    expect(session.type).toBe("print");
+    expect(session.command).toBe("bun --eval console.log(process.argv.at(-1))");
+
+    for (let i = 0; i < 40; i++) {
+      const transcript = await readTranscript(session.id);
+      if (transcript?.text.includes("print-task-arg")) break;
+      await Bun.sleep(25);
+    }
+
+    expect((await readTranscript(session.id))?.text).toContain("print-task-arg");
+  });
+
   test("persists owner and labels and supports filters", async () => {
     const cwd = await tmpCwd();
     const session = createSession({

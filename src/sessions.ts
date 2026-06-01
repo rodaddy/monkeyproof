@@ -1,8 +1,9 @@
 /**
  * @module sessions
  * @description Session manager -- spawns, tracks, and streams coding agent processes.
- * Supports two modes:
- *   - "print": one-shot subprocess with piped stdout (original behavior)
+ * Supports three modes:
+ *   - "exec": one-shot shell command with piped stdout/stderr
+ *   - "print": one-shot subprocess with piped stdout (agent CLI behavior)
  *   - "interactive": tmux-based persistent session with live capture
  */
 
@@ -16,8 +17,12 @@ import { config, presets } from "./config";
 // Types
 // ---------------------------------------------------------------------------
 
+export type SessionType = "exec" | "print" | "interactive";
+
 export interface SessionCreateOpts {
   task: string;
+  type?: SessionType;
+  mode?: SessionType;
   cwd?: string;
   command?: string;
   args?: string[];
@@ -46,7 +51,7 @@ export interface SessionInfo {
   task: string;
   cwd: string;
   command: string;
-  type: "print" | "interactive";
+  type: SessionType;
   status: SessionStatus;
   exitCode: number | null;
   pid: number | null;
@@ -68,7 +73,7 @@ interface Session {
   task: string;
   cwd: string;
   command: string;
-  type: "print" | "interactive";
+  type: SessionType;
   owner: string | null;
   labels: string[];
   pid: number | null;
@@ -134,7 +139,12 @@ export function createSession(opts: SessionCreateOpts): SessionInfo {
   let command: string;
   let args: string[];
 
-  if (opts.preset && presets[opts.preset]) {
+  const sessionType = opts.type ?? opts.mode ?? "exec";
+
+  if (sessionType === "exec") {
+    command = opts.command || "/bin/sh";
+    args = opts.args ? [...opts.args, opts.task] : ["-lc", opts.task];
+  } else if (opts.preset && presets[opts.preset]) {
     const preset = presets[opts.preset]!;
     command = preset.command;
     args = [...preset.args];
@@ -143,11 +153,13 @@ export function createSession(opts: SessionCreateOpts): SessionInfo {
     args = opts.args || ["--print", "--permission-mode", "bypassPermissions"];
   }
 
-  if (command === "claude" && opts.maxTurns) {
+  if (sessionType !== "exec" && command === "claude" && opts.maxTurns) {
     args.push("--max-turns", String(opts.maxTurns));
   }
 
-  args.push(opts.task);
+  if (sessionType !== "exec") {
+    args.push(opts.task);
+  }
 
   const procEnv: Record<string, string> = {
     ...(process.env as Record<string, string>),
@@ -173,8 +185,8 @@ export function createSession(opts: SessionCreateOpts): SessionInfo {
     id,
     task: opts.task.slice(0, 500),
     cwd,
-    command: `${command} ${args.slice(0, -1).join(" ")}`,
-    type: "print",
+    command: sessionType === "exec" ? `${command} ${args.join(" ")}` : `${command} ${args.slice(0, -1).join(" ")}`,
+    type: sessionType,
     owner: opts.owner || null,
     labels: normalizeLabels(opts.labels),
     pid: proc.pid ?? null,

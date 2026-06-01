@@ -45,13 +45,38 @@ bun install
 AGENT_WS_TOKEN=your-secret-token bun run src/index.ts
 ```
 
-## Spawn a session
+## Spawn a direct exec session (default)
+
+`POST /sessions` defaults to direct shell execution (`type: "exec"`). MonkeyProof runs the `task` with `/bin/sh -lc` unless you pass an explicit `command`/`args`. This is the preferred path for normal automation and maintenance work because MonkeyProof executes the command directly instead of routing through Claude middleware.
+
+```bash
+curl -X POST http://localhost:3200/sessions \
+  -H "Authorization: Bearer your-s...ken" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "task": "bun test",
+    "cwd": "/home/skippy/Development/king/king-dashboard"
+  }'
+```
+
+You can also be explicit:
+
+```json
+{ "type": "exec", "task": "scripts/maintenance --dry-run", "cwd": "/path/to/repo" }
+```
+
+`mode` is accepted as a backwards-compatible alias for `type`.
+
+## Spawn an agent print session
+
+Claude/Codex print sessions are still supported, but they must be requested explicitly with `type: "print"` (or `mode: "print"`).
 
 ```bash
 curl -X POST http://localhost:3200/sessions \
   -H "Authorization: Bearer your-secret-token" \
   -H "Content-Type: application/json" \
   -d '{
+    "type": "print",
     "task": "Fix the bug in auth.ts",
     "cwd": "/home/skippy/Development/king/king-dashboard",
     "command": "claude",
@@ -88,12 +113,12 @@ ws.send(JSON.stringify({ type: "stdin", data: "yes\n" }));
 
 ## Agent Presets
 
-Instead of specifying `command` + `args` every time, use presets:
+Instead of specifying `command` + `args` every time for print/interactive agent sessions, use presets and set `type`/`mode` explicitly:
 
 ```bash
 curl -X POST http://localhost:3200/sessions \
   -H "Authorization: Bearer your-secret-token" \
-  -d '{"task": "Fix the bug", "cwd": "/path/to/repo", "preset": "claude"}'
+  -d '{"type": "print", "task": "Fix the bug", "cwd": "/path/to/repo", "preset": "claude"}'
 ```
 
 Built-in presets: `claude`, `claude-sonnet`, `claude-opus`, `claude-interactive`, `claude-interactive-sonnet`, `claude-interactive-opus`, `codex`, `codex-auto`
